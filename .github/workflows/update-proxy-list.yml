@@ -1,0 +1,64 @@
+name: 更新代理列表
+
+# 添加权限配置
+permissions:
+  contents: write
+  actions: read
+  pull-requests: write
+  issues: write
+  repository-projects: write
+
+on:
+  schedule:
+    # 每天早上7点和晚上7点更新代理列表（北京时间）
+    - cron: '0 23 * * *'  # 北京时间早上7点 (UTC 23:00)
+    - cron: '0 11 * * *'  # 北京时间晚上7点 (UTC 11:00)
+  workflow_dispatch:
+    # 允许手动触发
+
+jobs:
+  update-proxies:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+        ref: main
+      
+    - name: 设置Python环境
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+        
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests beautifulsoup4
+        
+    - name: 抓取代理列表
+      run: |
+        echo "开始抓取代理列表..."
+        python generate_proxy_list.py
+        echo "抓取完成，检查文件是否生成..."
+        if [ -f proxy.txt ]; then
+          echo "proxy.txt 文件已生成"
+          echo "文件内容预览："
+          head -5 proxy.txt
+        else
+          echo "proxy.txt 文件未生成"
+          exit 1
+        fi
+        
+    - name: 提交更新
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git config --global user.email "action@github.com"
+        git config --global user.name "GitHub Action"
+        git remote set-url origin https://x-access-token:$GITHUB_TOKEN@github.com/${{ github.repository }}.git
+        git add proxy.txt proxy_clean.txt
+        git commit -m "更新代理列表" || echo "没有更改"
+        git push origin +main:main
